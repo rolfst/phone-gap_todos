@@ -1,0 +1,804 @@
+//////////////////////////////////////////////////////////////////////////
+//                                                                      //
+// This is a generated file. You can view the original                  //
+// source in your browser if your browser supports source maps.         //
+//                                                                      //
+// If you are using Chrome, open the Developer Tools and click the gear //
+// icon in its lower right corner. In the General Settings panel, turn  //
+// on 'Enable source maps'.                                             //
+//                                                                      //
+// If you are using Firefox 23, go to `about:config` and set the        //
+// `devtools.debugger.source-maps-enabled` preference to true.          //
+// (The preference should be on by default in Firefox 24; versions      //
+// older than 23 do not support source maps.)                           //
+//                                                                      //
+//////////////////////////////////////////////////////////////////////////
+
+
+(function () {
+
+/* Imports */
+var Meteor = Package.meteor.Meteor;
+var _ = Package.underscore._;
+var Random = Package.random.Random;
+var LocalCollection = Package.minimongo.LocalCollection;
+var Minimongo = Package.minimongo.Minimongo;
+var EJSON = Package.ejson.EJSON;
+var Deps = Package.deps.Deps;
+var WebApp = Package.webapp.WebApp;
+var Log = Package.logging.Log;
+var Session = Package.session.Session;
+var DDP = Package.livedata.DDP;
+var UI = Package.ui.UI;
+var Handlebars = Package.ui.Handlebars;
+var Spacebars = Package.spacebars.Spacebars;
+var Template = Package.templating.Template;
+var check = Package.check.check;
+var Match = Package.check.Match;
+var $ = Package.jquery.$;
+var jQuery = Package.jquery.jQuery;
+var HTML = Package.htmljs.HTML;
+
+/* Package-scope variables */
+var GroundDB, _gDB;
+
+(function () {
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                                           //
+// packages/grounddb/groundDB.client.js                                                                      //
+//                                                                                                           //
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+                                                                                                             //
+"use strict";                                                                                                // 1
+                                                                                                             // 2
+/*                                                                                                           // 3
+                                                                                                             // 4
+GroundDB is a thin layer providing Meteor offline database and methods                                       // 5
+                                                                                                             // 6
+Concept, localstorage is simple wide spread but slow                                                         // 7
+                                                                                                             // 8
+GroundDB saves outstanding methods and minimongo into localstorage at window                                 // 9
+unload, but can be configured to save at any changes and at certain interval(ms)                             // 10
+                                                                                                             // 11
+When the app loads GroundDB resumes methods and database changes                                             // 12
+                                                                                                             // 13
+Regz. RaiX                                                                                                   // 14
+                                                                                                             // 15
+*/                                                                                                           // 16
+///////////////////////////////// TEST SCOPE ///////////////////////////////////                             // 17
+                                                                                                             // 18
+_gDB = {};                                                                                                   // 19
+                                                                                                             // 20
+// Map connection                                                                                            // 21
+_gDB.connection = Meteor.connection || Meteor.default_connection;                                            // 22
+                                                                                                             // 23
+// Map parseId function                                                                                      // 24
+_gDB.idParse = LocalCollection && LocalCollection._idParse ||                                                // 25
+        Meteor.idParse;                                                                                      // 26
+// new Meteor.Collection.ObjectID(hexString)                                                                 // 27
+                                                                                                             // 28
+// State of all subscriptions in meteor                                                                      // 29
+_gDB.subscriptionsReady = false;                                                                             // 30
+_gDB.subscriptionsReadyDeps = new Deps.Dependency();                                                         // 31
+                                                                                                             // 32
+// TODO: Remove                                                                                              // 33
+window.Meteor = Meteor;                                                                                      // 34
+////////////////////////////// LOCALSTORAGE ////////////////////////////////////                             // 35
+                                                                                                             // 36
+// Well, I'm still using console.log                                                                         // 37
+window.console = (window && window.console && window.console.log)?                                           // 38
+        window.console: {                                                                                    // 39
+  log: function() {}                                                                                         // 40
+};                                                                                                           // 41
+                                                                                                             // 42
+// Status of app reload                                                                                      // 43
+_gDB._isReloading = false;                                                                                   // 44
+                                                                                                             // 45
+// Returns the localstorage if its found and working                                                         // 46
+// TODO: check if this works in IE                                                                           // 47
+// could use Meteor._localStorage - just needs a rewrite                                                     // 48
+_gDB._storage = function() {                                                                                 // 49
+  var storage,                                                                                               // 50
+      fail,                                                                                                  // 51
+      uid;                                                                                                   // 52
+  try {                                                                                                      // 53
+    uid = Random.id();                                                                                       // 54
+    (storage = window.localStorage).setItem(uid, uid);                                                       // 55
+    fail = (storage.getItem(uid) !== uid);                                                                   // 56
+    storage.removeItem(uid);                                                                                 // 57
+    if (fail) {                                                                                              // 58
+      storage = false;                                                                                       // 59
+    }                                                                                                        // 60
+  } catch(e) {}                                                                                              // 61
+                                                                                                             // 62
+  return storage;                                                                                            // 63
+};                                                                                                           // 64
+                                                                                                             // 65
+// get our storage if found                                                                                  // 66
+_gDB.storage = _gDB._storage();                                                                              // 67
+                                                                                                             // 68
+_gDB._prefix = 'groundDB.';                                                                                  // 69
+                                                                                                             // 70
+// Add a correct prefix for groundDB                                                                         // 71
+_gDB._getGroundDBPrefix = function(suffix) {                                                                 // 72
+  // Should we support multiple users on multiple tabs namespacing data                                      // 73
+  // in localstorage by current userId?                                                                      // 74
+  //return prefix + ((Meteor.userId())?Meteor.userId()+'.':'') + suffix;                                     // 75
+  return _gDB._prefix + suffix;                                                                              // 76
+};                                                                                                           // 77
+                                                                                                             // 78
+// save object into localstorage                                                                             // 79
+_gDB._saveObject = function(name, object) {                                                                  // 80
+  if (_gDB.storage && _gDB._isReloading === false) {                                                         // 81
+    var cachedDoc = object && EJSON.minify(object);                                                          // 82
+    try {                                                                                                    // 83
+      _gDB.storage.setItem(_gDB._getGroundDBPrefix(name), cachedDoc);                                        // 84
+    } catch (e) {                                                                                            // 85
+      GroundDB.onQuotaExceeded();                                                                            // 86
+    }                                                                                                        // 87
+  }                                                                                                          // 88
+};                                                                                                           // 89
+                                                                                                             // 90
+// get object from localstorage, retur null if not found                                                     // 91
+_gDB._loadObject = function(name) {                                                                          // 92
+  // If storage is supported                                                                                 // 93
+  if (_gDB.storage) {                                                                                        // 94
+    // Then load cached document                                                                             // 95
+    var cachedDoc = _gDB.storage.getItem(_gDB._getGroundDBPrefix(name));                                     // 96
+    return (cachedDoc)? EJSON.maxify(cachedDoc): null;                                                       // 97
+  }                                                                                                          // 98
+  return null;                                                                                               // 99
+};                                                                                                           // 100
+                                                                                                             // 101
+////////////////////////// MINIMIZE & MAXIMIZE DOCUMENTS ///////////////////////                             // 102
+                                                                                                             // 103
+_gDB.minify = function(bigDoc) {                                                                             // 104
+  return EJSON.stringify(bigDoc);                                                                            // 105
+};                                                                                                           // 106
+                                                                                                             // 107
+_gDB.maxify = function(smallDoc) {                                                                           // 108
+  return EJSON.parse(smallDoc);                                                                              // 109
+};                                                                                                           // 110
+                                                                                                             // 111
+                                                                                                             // 112
+/////////////////////////////// ONE TIME OUT ///////////////////////////////////                             // 113
+                                                                                                             // 114
+// This utillity function allows us to run a function - but if its run before                                // 115
+// time out delay then we stop and start a new timeout - delaying the execution                              // 116
+// of the function - TODO: have an option for n number of allowed delays before                              // 117
+// execution of timeout function limitNumberOfTimes                                                          // 118
+_gDB.OneTimeout = function() {                                                                               // 119
+  var self = this;                                                                                           // 120
+  // Pointer to Meteor.setTimeout                                                                            // 121
+  self._id = null;                                                                                           // 122
+  // Save the methods into the localstorage                                                                  // 123
+  self.oneTimeout = function(func, delay) {                                                                  // 124
+    self._count++;                                                                                           // 125
+    // If a timeout is in progress                                                                           // 126
+    if (self._id !== null) {                                                                                 // 127
+      // then stop the current timeout - we have updates                                                     // 128
+      Meteor.clearTimeout(self._id);                                                                         // 129
+    }                                                                                                        // 130
+    // Spawn new timeout                                                                                     // 131
+    self._id = Meteor.setTimeout(function() {                                                                // 132
+      // Ok, we reset reference so we dont get cleared and go to work                                        // 133
+      self._id = null;                                                                                       // 134
+      // Run function                                                                                        // 135
+      func();                                                                                                // 136
+      // Delay execution a bit                                                                               // 137
+    }, delay);                                                                                               // 138
+  };                                                                                                         // 139
+};                                                                                                           // 140
+                                                                                                             // 141
+////////////////////////// GET SERVER TIME DIFFERENCE //////////////////////////                             // 142
+                                                                                                             // 143
+_gDB._serverTimeDiff = 0; // Time difference in ms                                                           // 144
+                                                                                                             // 145
+if (_gDB.storage) {                                                                                          // 146
+  // Initialize the _gDB._serverTimeDiff                                                                     // 147
+  _gDB._serverTimeDiff = (1*_gDB.storage.getItem(_gDB._prefix+'timeDiff')) || 0;                             // 148
+  // At server startup we figure out the time difference between server and                                  // 149
+  // client time - this includes lag and timezone                                                            // 150
+  Meteor.startup(function() {                                                                                // 151
+    // Call the server method an get server time                                                             // 152
+    Meteor.call('getServerTime', function(error, result) {                                                   // 153
+      if (!error) {                                                                                          // 154
+        // Update our server time diff                                                                       // 155
+        _gDB._serverTimeDiff = result - Date.now();// - lag or/and timezone                                  // 156
+        // Update the localstorage                                                                           // 157
+        _gDB.storage.setItem(_gDB._prefix + 'timeDiff', _gDB._serverTimeDiff);                               // 158
+      }                                                                                                      // 159
+    }); // EO Server call                                                                                    // 160
+  });                                                                                                        // 161
+}                                                                                                            // 162
+                                                                                                             // 163
+//////////////////////////////// GROUND DATABASE ///////////////////////////////                             // 164
+                                                                                                             // 165
+// Add a pointer register of grounded databases                                                              // 166
+_gDB._groundDatabases = {};                                                                                  // 167
+                                                                                                             // 168
+GroundDB = function(name, options) {                                                                         // 169
+                                                                                                             // 170
+  // Inheritance Meteor Collection can be set by options.collection                                          // 171
+  // Accepts smart collections by Arunoda Susiripala                                                         // 172
+  var self;                                                                                                  // 173
+                                                                                                             // 174
+  // Either name is a Meteor collection or we create a new Meteor collection                                 // 175
+  if (name instanceof Meteor.Collection) {                                                                   // 176
+    self = name;                                                                                             // 177
+  } else {                                                                                                   // 178
+    self = new Meteor.Collection(name, options);                                                             // 179
+  }                                                                                                          // 180
+                                                                                                             // 181
+  // Is this an offline client only database?                                                                // 182
+  self.offlineDatabase = !!(self._connection === null);                                                      // 183
+                                                                                                             // 184
+  // Initialize collection name                                                                              // 185
+  self.name = (self._name)? self._name : 'null';                                                             // 186
+                                                                                                             // 187
+                                                                                                             // 188
+  /////// Finally got a name... and rigged                                                                   // 189
+                                                                                                             // 190
+  // Add to pointer register                                                                                 // 191
+  _gDB._groundDatabases[ self.name ] = self;                                                                 // 192
+                                                                                                             // 193
+  // prefixed supers container                                                                               // 194
+  self.gdbSuper = {};                                                                                        // 195
+                                                                                                             // 196
+  // Overwrite the store update                                                                              // 197
+  if (self._connection && self._connection._stores[ self.name ]) {                                           // 198
+    // Set super                                                                                             // 199
+    self.gdbSuper.storeUpdate = self._connection._stores[ self.name ].update;                                // 200
+    // Overwrite                                                                                             // 201
+    self._connection._stores[ self.name ].update = function (msg) {                                          // 202
+      // console.log('GOT UPDATE');                                                                          // 203
+      var mongoId = msg.id && _gDB.idParse(msg.id);                                                          // 204
+      var doc = msg.id && self._collection.findOne(mongoId);                                                 // 205
+      // We check that local loaded docs are removed before remote sync                                      // 206
+      // otherwise it would throw an error                                                                   // 207
+        // When adding and doc allready found then we remove it                                              // 208
+      if (msg.msg === 'added' && doc) {                                                                      // 209
+          // We mark the data as remotely loaded TODO:                                                       // 210
+          delete self._localOnly[mongoId];                                                                   // 211
+          // Solve the conflict - server wins                                                                // 212
+          // Then remove the client document                                                                 // 213
+          self._collection.remove(mongoId);                                                                  // 214
+      }                                                                                                      // 215
+      // If message wants to remove the doc but allready removed locally then                                // 216
+      // fix this before calling super                                                                       // 217
+      if (msg.msg === 'removed' && !doc) {                                                                   // 218
+        self._collection.insert({_id: mongoId});                                                             // 219
+      }                                                                                                      // 220
+      // Call super and let it do its thing                                                                  // 221
+      self.gdbSuper.storeUpdate(msg);                                                                        // 222
+    };                                                                                                       // 223
+  }                                                                                                          // 224
+                                                                                                             // 225
+  // Flag true/false depending if database is loaded from local                                              // 226
+  self._databaseLoaded = false;                                                                              // 227
+                                                                                                             // 228
+  // Map local-only - this makes sure that localstorage matches remote loaded db                             // 229
+  self._localOnly = {};                                                                                      // 230
+                                                                                                             // 231
+  // At some point we can do a remove all local-only data? Making sure that we                               // 232
+  // Only got the same data as the subscription                                                              // 233
+  self.removeLocalOnly = function() {                                                                        // 234
+    _.each(self._localOnly, function(isLocalOnly, id) {                                                      // 235
+      if (isLocalOnly) {                                                                                     // 236
+        self._collection.remove({ _id: id });                                                                // 237
+        delete self._localOnly[id];                                                                          // 238
+      }                                                                                                      // 239
+    });                                                                                                      // 240
+  };                                                                                                         // 241
+                                                                                                             // 242
+  self.isCleanedUp = false;                                                                                  // 243
+                                                                                                             // 244
+  Deps.autorun(function() {                                                                                  // 245
+    if (GroundDB.ready() && !self.isCleanedUp) {                                                             // 246
+      // If all subscriptions have updated the system then remove all local only                             // 247
+      // data?                                                                                               // 248
+      // console.log('Clean up ' + self.name);                                                               // 249
+      self.isCleanedUp = true;                                                                               // 250
+      self.removeLocalOnly();                                                                                // 251
+    }                                                                                                        // 252
+  });                                                                                                        // 253
+                                                                                                             // 254
+  // We dont trust the localstorage so we make sure it doesn't contain                                       // 255
+  // duplicated id's - primary a problem i FF                                                                // 256
+  self._checkDocs = function(a) {                                                                            // 257
+    var c = {};                                                                                              // 258
+    // // We create c as an object with no duplicate _id's                                                   // 259
+    // for (var i = 0, keys = Object.keys(a); i < keys.length; i++) {                                        // 260
+    //   // Extract key/value                                                                                // 261
+    //   var key = keys[i];                                                                                  // 262
+    //   var doc = a[key];                                                                                   // 263
+    //   // set value in c                                                                                   // 264
+    //   c[key] = doc;                                                                                       // 265
+    // }                                                                                                     // 266
+                                                                                                             // 267
+    _.each(a, function(doc, key) {                                                                           // 268
+      c[key] = doc;                                                                                          // 269
+    });                                                                                                      // 270
+    return c;                                                                                                // 271
+  };                                                                                                         // 272
+                                                                                                             // 273
+  // Bulk Load database from local to memory                                                                 // 274
+  self._loadDatabase = function() {                                                                          // 275
+    // Then load the docs into minimongo                                                                     // 276
+    GroundDB.onResumeDatabase(self.name);                                                                    // 277
+    // Load object from localstorage                                                                         // 278
+    var docs = _gDB._loadObject('db.' + self.name);                                                          // 279
+    // Initialize client documents                                                                           // 280
+    _.each(self._checkDocs( (docs) ? docs._map : {} ), function(doc) {                                       // 281
+      // Test if document allready exists, this is a rare case but accounts                                  // 282
+      // sometimes adds data to the users database, eg. if "users" are grounded                              // 283
+      var exists = self._collection.findOne({ _id: doc._id });                                               // 284
+      // If collection is populated before we get started then the data in                                   // 285
+      // memory would be considered latest therefor we dont load from local                                  // 286
+      if (!exists) {                                                                                         // 287
+        if (!self.offlineDatabase) {                                                                         // 288
+          // If online database then mark the doc as local only TODO:                                        // 289
+          self._localOnly[doc._id] = true;                                                                   // 290
+        }                                                                                                    // 291
+        self._collection.insert(doc);                                                                        // 292
+      }                                                                                                      // 293
+    });                                                                                                      // 294
+                                                                                                             // 295
+                                                                                                             // 296
+    // Setting database loaded, this allows minimongo to be saved into local                                 // 297
+    self._databaseLoaded = true;                                                                             // 298
+  };                                                                                                         // 299
+                                                                                                             // 300
+  // One timeout pointer for database saves                                                                  // 301
+  var saveDatabaseDelay = new _gDB.OneTimeout();                                                             // 302
+                                                                                                             // 303
+  // Use reactivity to trigger saves                                                                         // 304
+  var _gdbDataChanged = new Deps.Dependency();                                                               // 305
+                                                                                                             // 306
+  // trigger change                                                                                          // 307
+  var _gdbDatabaseChanged = function() {                                                                     // 308
+    _gdbDataChanged.changed();                                                                               // 309
+  };                                                                                                         // 310
+                                                                                                             // 311
+  // Bulk Save database from memory to local, meant to be as slim, fast and                                  // 312
+  // realiable as possible                                                                                   // 313
+  self._saveDatabase = function() {                                                                          // 314
+    // If data loaded from localstorage then its ok to save - otherwise we                                   // 315
+    // would override with less data                                                                         // 316
+    if (self._databaseLoaded) {                                                                              // 317
+      saveDatabaseDelay.oneTimeout(function() {                                                              // 318
+        // We delay the operation a bit in case of multiple saves - this creates                             // 319
+        // a minor lag in terms of localstorage updating but it limits the num                               // 320
+        // of saves to the database                                                                          // 321
+        // Make sure our database is loaded                                                                  // 322
+        GroundDB.onCacheDatabase(self.name);                                                                 // 323
+        // Save the collection into localstorage                                                             // 324
+        _gDB._saveObject('db.' + self.name, self._collection._docs);                                         // 325
+      }, 200);                                                                                               // 326
+    }                                                                                                        // 327
+  };                                                                                                         // 328
+                                                                                                             // 329
+  // Observe all changes and rely on the less agressive observer system for                                  // 330
+  // providing a reasonable update frequens                                                                  // 331
+  self.find().observe({                                                                                      // 332
+    'added': _gdbDatabaseChanged,                                                                            // 333
+    'changed': _gdbDatabaseChanged,                                                                          // 334
+    'removed': _gdbDatabaseChanged                                                                           // 335
+  });                                                                                                        // 336
+                                                                                                             // 337
+  // Run save database at data changes                                                                       // 338
+  Meteor.autorun(function() {                                                                                // 339
+    _gdbDataChanged.depend();                                                                                // 340
+    self._saveDatabase();                                                                                    // 341
+  });                                                                                                        // 342
+                                                                                                             // 343
+  // Load the database as soon as possible                                                                   // 344
+  self._loadDatabase();                                                                                      // 345
+                                                                                                             // 346
+  return self;                                                                                               // 347
+};                                                                                                           // 348
+                                                                                                             // 349
+// TODO: change when linker is official                                                                      // 350
+window.GroundDB = GroundDB;                                                                                  // 351
+                                                                                                             // 352
+///////////////////////////////// EVENTS ///////////////////////////////////////                             // 353
+                                                                                                             // 354
+// This is an overridable method for hooking on to the GroundDB events                                       // 355
+                                                                                                             // 356
+GroundDB.onQuotaExceeded = function() {                                                                      // 357
+  throw new Error('Quota exceeded!');                                                                        // 358
+};                                                                                                           // 359
+                                                                                                             // 360
+GroundDB.onResumeDatabase = function(name) {                                                                 // 361
+  // console.log('Resume database: ' + name);                                                                // 362
+};                                                                                                           // 363
+                                                                                                             // 364
+GroundDB.onResumeMethods = function() {                                                                      // 365
+  // console.log('Resume outstanding methods');                                                              // 366
+};                                                                                                           // 367
+                                                                                                             // 368
+GroundDB.onMethodCall = function(methodCall) {                                                               // 369
+  // console.log('Method call ' + methodCall.method);                                                        // 370
+};                                                                                                           // 371
+                                                                                                             // 372
+GroundDB.onCacheDatabase = function(name) {                                                                  // 373
+  // console.log('Cache database: ' + name);                                                                 // 374
+};                                                                                                           // 375
+                                                                                                             // 376
+GroundDB.onCacheMethods = function() {                                                                       // 377
+  // console.log('Cache methods');                                                                           // 378
+};                                                                                                           // 379
+                                                                                                             // 380
+GroundDB.onTabSync = function(type, key) {                                                                   // 381
+  // console.log('Sync tabs - Cache is updated by: ' + type + ((key)?key:''));                               // 382
+};                                                                                                           // 383
+                                                                                                             // 384
+GroundDB.onFlushInMemoryMethods = function() {                                                               // 385
+  // console.log('We flush the in memory outstanding methods');                                              // 386
+};                                                                                                           // 387
+                                                                                                             // 388
+GroundDB.ready = function() {                                                                                // 389
+  _gDB.subscriptionsReadyDeps.depend();                                                                      // 390
+  return _gDB.subscriptionsReady;                                                                            // 391
+};                                                                                                           // 392
+                                                                                                             // 393
+GroundDB.saveObject = _gDB._saveObject;                                                                      // 394
+                                                                                                             // 395
+GroundDB.loadObject = _gDB._loadObject;                                                                      // 396
+                                                                                                             // 397
+GroundDB.now = function() {                                                                                  // 398
+  return Date.now() + _gDB._serverTimeDiff;                                                                  // 399
+};                                                                                                           // 400
+                                                                                                             // 401
+// Methods to skip from caching                                                                              // 402
+_gDB.skipThisMethod = { login: true, getServerTime: true };                                                  // 403
+                                                                                                             // 404
+// Add settings for methods to skip or not when caching methods                                              // 405
+GroundDB.skipMethods = function(methods) {                                                                   // 406
+  if (typeof methods !== 'object') {                                                                         // 407
+    throw new Error('skipMethods expects parametre as object of method names to skip when caching methods'); // 408
+  }                                                                                                          // 409
+  for (var key in methods) {                                                                                 // 410
+    if (methods.hasOwnProperty(key)) {                                                                       // 411
+      // Extend the skipMethods object keys with boolean values                                              // 412
+      _gDB.skipThisMethod[key] = !!methods[key];                                                             // 413
+    }                                                                                                        // 414
+  }                                                                                                          // 415
+};                                                                                                           // 416
+                                                                                                             // 417
+GroundDB.OneTimeout = _gDB.OneTimeout;                                                                       // 418
+                                                                                                             // 419
+///////////////////////////// RESUME METHODS ///////////////////////////////////                             // 420
+                                                                                                             // 421
+// Is methods resumed?                                                                                       // 422
+_gDB._methodsResumed = false;                                                                                // 423
+                                                                                                             // 424
+// Get a nice array of current methods                                                                       // 425
+_gDB._getMethodsList = function() {                                                                          // 426
+  // Array of outstanding methods                                                                            // 427
+  var methods = [];                                                                                          // 428
+  // Made a public API to disallow caching of some method calls                                              // 429
+  // Convert the data into nice array                                                                        // 430
+  _.each(_gDB.connection._methodInvokers, function(method) {                                                 // 431
+    if (!_gDB.skipThisMethod[method._message.method]) {                                                      // 432
+      // Dont cache login or getServerTime calls - they are spawned pr. default                              // 433
+      methods.push({                                                                                         // 434
+        // Format the data                                                                                   // 435
+        method: method._message.method,                                                                      // 436
+        args: method._message.params,                                                                        // 437
+        options: { wait: method._wait }                                                                      // 438
+      });                                                                                                    // 439
+    }                                                                                                        // 440
+  });                                                                                                        // 441
+  return methods;                                                                                            // 442
+};                                                                                                           // 443
+                                                                                                             // 444
+// Flush in memory methods, its a dirty trick and could have some edge cases                                 // 445
+// that would throw an error? Eg. if flushed in the middle of waiting for                                    // 446
+// a method call to return - the returning call would not be able to find the                                // 447
+// method callback. This could happen if the user submits a change in one window                             // 448
+// and then switches to another tab and submits a change there before the first                              // 449
+// method gets back?                                                                                         // 450
+_gDB._flushInMemoryMethods = function() {                                                                    // 451
+  var didFlushSome = false;                                                                                  // 452
+  // TODO: flush should be rewritten to - we should do method proxy stuff...                                 // 453
+  // This code is a bit dirty                                                                                // 454
+  if (_gDB.connection && _gDB.connection._outstandingMethodBlocks &&                                         // 455
+          _gDB.connection._outstandingMethodBlocks.length) {                                                 // 456
+                                                                                                             // 457
+    // Clear the in memory outstanding methods TODO: Check if this is enough                                 // 458
+    // Check to see if we should skip methods                                                                // 459
+    for (var i = 0; i < _gDB.connection._outstandingMethodBlocks.length; i++) {                              // 460
+      var method = _gDB.connection._outstandingMethodBlocks[i];                                              // 461
+      if (method && method._message && !_gDB.skipThisMethod[method._message.method]) {                       // 462
+        // Clear invoke callbacks                                                                            // 463
+//    _gDB.connection._outstandingMethodBlocks = [];                                                         // 464
+        delete _gDB.connection._outstandingMethodBlocks[i];                                                  // 465
+//    _gDB.connection._methodInvokers = {};                                                                  // 466
+        delete _gDB.connection._methodInvokers[i];                                                           // 467
+        // Set the flag to call back                                                                         // 468
+        didFlushSome = true;                                                                                 // 469
+      }                                                                                                      // 470
+    }                                                                                                        // 471
+    if (didFlushSome) {                                                                                      // 472
+      // Call the event callback                                                                             // 473
+      GroundDB.onFlushInMemoryMethods();                                                                     // 474
+    }                                                                                                        // 475
+                                                                                                             // 476
+  }                                                                                                          // 477
+};                                                                                                           // 478
+                                                                                                             // 479
+// Extract only newly added methods from localstorage                                                        // 480
+_gDB._getMethodUpdates = function(newMethods) {                                                              // 481
+  var result = [];                                                                                           // 482
+  if (newMethods && newMethods.length > 0) {                                                                 // 483
+    // Get the old methods allready in memory                                                                // 484
+    // We could have done an optimized slice version or just starting at                                     // 485
+    // oldMethods.length, but this tab is not in focus                                                       // 486
+    var oldMethods = _gDB._getMethodsList();                                                                 // 487
+    // We do a check to see if we should flush our in memory methods if allready                             // 488
+    // run on an other tab - an odd case - the first item would not match in                                 // 489
+    // old methods and new methods, its only valid to make this test if both                                 // 490
+    // methods arrays are not empty allready                                                                 // 491
+    if (oldMethods.length &&                                                                                 // 492
+            EJSON.stringify(oldMethods[0]) !== EJSON.stringify(newMethods[0])) {                             // 493
+      // Flush the in memory / queue methods                                                                 // 494
+      _gDB._flushInMemoryMethods();                                                                          // 495
+      // We reset the oldMethods array of outstanding methods                                                // 496
+      oldMethods = [];                                                                                       // 497
+    }                                                                                                        // 498
+    // Iterate over the new methods, old ones should be ordered in beginning of                              // 499
+    // newMethods we do a simple test an throw an error if thats not the case                                // 500
+    for (var i=0; i < newMethods.length; i++) {                                                              // 501
+                                                                                                             // 502
+      if (i < oldMethods.length) {                                                                           // 503
+        // Do a hard slow test to make sure all is in sync                                                   // 504
+        if (EJSON.stringify(oldMethods[i]) !== EJSON.stringify(newMethods[i])) {                             // 505
+          // The client data is corrupted, throw error or force the client to                                // 506
+          // reload, does not make sense to continue?                                                        // 507
+          throw new Error('The method database is corrupted or out of sync at position: ' + i);              // 508
+        }                                                                                                    // 509
+      } else {                                                                                               // 510
+        // Ok out of oldMethods this is a new method call                                                    // 511
+        result.push(newMethods[i]);                                                                          // 512
+        GroundDB.onMethodCall(newMethods[i]);                                                                // 513
+      }                                                                                                      // 514
+    } // EO for iteration                                                                                    // 515
+  } else {                                                                                                   // 516
+    // If new methods are empty this means that the other client / tap has                                   // 517
+    // Allready sendt and recieved the method calls - so we flush our in mem                                 // 518
+    // Flush the in memory / queue methods                                                                   // 519
+    _gDB._flushInMemoryMethods();                                                                            // 520
+  }                                                                                                          // 521
+  // return the result                                                                                       // 522
+  return result;                                                                                             // 523
+};                                                                                                           // 524
+                                                                                                             // 525
+///////////////////////////// LOAD & SAVE METHODS //////////////////////////////                             // 526
+                                                                                                             // 527
+// load methods from localstorage and resume the methods                                                     // 528
+_gDB._loadMethods = function() {                                                                             // 529
+  // Load methods from local                                                                                 // 530
+  var methods = _gDB._loadObject('methods');                                                                 // 531
+                                                                                                             // 532
+  // We are only going to submit the diff                                                                    // 533
+  methods = _gDB._getMethodUpdates(methods);                                                                 // 534
+                                                                                                             // 535
+  // If any methods outstanding                                                                              // 536
+  if (methods) {                                                                                             // 537
+    // Iterate over array of methods                                                                         // 538
+    //_.each(methods, function(method) {                                                                     // 539
+    while (methods.length > 0) {                                                                             // 540
+      // FIFO buffer                                                                                         // 541
+      var method = methods.shift();                                                                          // 542
+                                                                                                             // 543
+      // parse "/collection/command" or "command"                                                            // 544
+      var params = method.method.split('/');                                                                 // 545
+      var collection = params[1];                                                                            // 546
+      var command = params[2];                                                                               // 547
+                                                                                                             // 548
+      // Do work on collection                                                                               // 549
+      if (collection && command) {                                                                           // 550
+        // we are going to run an simulated insert - this is allready in db                                  // 551
+        // since we are running local, so we remove it from the collection first                             // 552
+        if (_gDB._groundDatabases[collection]) {                                                             // 553
+          // The database is registered as a ground database                                                 // 554
+          var mongoId = _gDB.idParse((method.args && method.args[0])?                                        // 555
+                  method.args[0]._id || method.args[0]:'');                                                  // 556
+                                                                                                             // 557
+          // Get the document on the client - if found                                                       // 558
+          var doc = _gDB._groundDatabases[collection]._collection.findOne(mongoId);                          // 559
+          if (doc) {                                                                                         // 560
+            // document found                                                                                // 561
+            // This is a problem: insert stub simulation, would fail so we                                   // 562
+            // remove the added document from client and let the method call                                 // 563
+            // re-insert it in simulation                                                                    // 564
+            if (command === 'insert') {                                                                      // 565
+              // Remove the item from ground database so it can be correctly                                 // 566
+              // inserted                                                                                    // 567
+              _gDB._groundDatabases[collection]._collection.remove(mongoId);                                 // 568
+              // We mark this as remote since we will be corrected if it's                                   // 569
+              // Wrong + If we don't the data is lost in this session.                                       // 570
+              // So we remove any localOnly flags                                                            // 571
+              delete _gDB._groundDatabases[collection]._localOnly[mongoId];                                  // 572
+            } // EO handle insert                                                                            // 573
+                                                                                                             // 574
+          } // EO Else no doc found in client database                                                       // 575
+        } // else collection would be a normal database                                                      // 576
+      } // EO collection work                                                                                // 577
+      // Add method to connection                                                                            // 578
+      _gDB.connection.apply(                                                                                 // 579
+              method.method, method.args, method.options);                                                   // 580
+    } // EO while methods                                                                                    // 581
+  } // EO if stored outstanding methods                                                                      // 582
+                                                                                                             // 583
+  // Dispatch methods loaded event                                                                           // 584
+  _gDB._methodsResumed = true;                                                                               // 585
+  GroundDB.onResumeMethods();                                                                                // 586
+}; // EO load methods                                                                                        // 587
+                                                                                                             // 588
+// Save the methods into the localstorage                                                                    // 589
+_gDB._saveMethods = function() {                                                                             // 590
+  if (_gDB._methodsResumed) {                                                                                // 591
+    // Ok memory is initialized                                                                              // 592
+    GroundDB.onCacheMethods();                                                                               // 593
+                                                                                                             // 594
+    // Save outstanding methods to localstorage                                                              // 595
+    _gDB._saveObject('methods', _gDB._getMethodsList());                                                     // 596
+  }                                                                                                          // 597
+};                                                                                                           // 598
+                                                                                                             // 599
+//////////////////////////// ALL SUBSCRIPTIONS READY ///////////////////////////                             // 600
+                                                                                                             // 601
+// Could be nice to have a Meteor.allSubscriptionsReady                                                      // 602
+Meteor.setInterval(function() {                                                                              // 603
+    var allReady = true;                                                                                     // 604
+    for (var subId in Meteor.connection._subscriptions) {                                                    // 605
+      var sub = Meteor.connection._subscriptions[subId];                                                     // 606
+      if (!sub.ready) {                                                                                      // 607
+        allReady = false;                                                                                    // 608
+        break;                                                                                               // 609
+      }                                                                                                      // 610
+    }                                                                                                        // 611
+    // Update dependencies                                                                                   // 612
+    if (allReady !== _gDB.subscriptionsReady) {                                                              // 613
+      _gDB.subscriptionsReady = allReady;                                                                    // 614
+      _gDB.subscriptionsReadyDeps.changed();                                                                 // 615
+    }                                                                                                        // 616
+                                                                                                             // 617
+  }, 5000);                                                                                                  // 618
+                                                                                                             // 619
+//////////////////////////// STARTUP METHODS RESUME ////////////////////////////                             // 620
+                                                                                                             // 621
+Meteor.startup(function() {                                                                                  // 622
+  // Wait some not to conflict with accouts login                                                            // 623
+  // TODO: Do we have a better way, instead of depending on time should depend                               // 624
+  // on en event.                                                                                            // 625
+  Meteor.setTimeout(function() {                                                                             // 626
+    _gDB._loadMethods();                                                                                     // 627
+  }, 500);                                                                                                   // 628
+});                                                                                                          // 629
+                                                                                                             // 630
+/////////////////////////// SYNC TABS METHODS DATABSE //////////////////////////                             // 631
+                                                                                                             // 632
+var syncDatabaseDelay = new _gDB.OneTimeout();                                                               // 633
+                                                                                                             // 634
+// Offline client only databases will sync a bit different than normal                                       // 635
+// This function is a bit hard - but it works - optimal solution could be to                                 // 636
+// have virtual method calls it would complicate things                                                      // 637
+_gDB._syncDatabase = function(name) {                                                                        // 638
+  // We set a small delay in case of more updates within the wait                                            // 639
+  syncDatabaseDelay.oneTimeout(function() {                                                                  // 640
+    var collection = _gDB._groundDatabases[name];                                                            // 641
+//    if (collection && (collection.offlineDatabase === true || !Meteor.status().connected)) {               // 642
+    if (collection) {                                                                                        // 643
+      // Add event hook                                                                                      // 644
+      GroundDB.onTabSync('database', name);                                                                  // 645
+      // Hard reset database?                                                                                // 646
+      var newDocs = _gDB._loadObject('db.' + name);                                                          // 647
+      collection.find().forEach(function(doc) {                                                              // 648
+        // Remove document                                                                                   // 649
+        collection._collection.remove(doc._id);                                                              // 650
+        // If found in new documents then hard update                                                        // 651
+        if (typeof newDocs[doc._id] !== 'undefined') {                                                       // 652
+          // Update doc                                                                                      // 653
+          collection._collection.insert(newDocs[doc._id]);                                                   // 654
+          delete newDocs[doc._id];                                                                           // 655
+        }                                                                                                    // 656
+      });                                                                                                    // 657
+      _.each(newDocs, function (doc) {                                                                       // 658
+        // insert doc                                                                                        // 659
+        collection._collection.insert(doc);                                                                  // 660
+      });                                                                                                    // 661
+    }                                                                                                        // 662
+  }, 150);                                                                                                   // 663
+};                                                                                                           // 664
+                                                                                                             // 665
+var syncMethodsDelay = new _gDB.OneTimeout();                                                                // 666
+                                                                                                             // 667
+// Syncronize tabs via method calls                                                                          // 668
+_gDB._syncMethods = function() {                                                                             // 669
+  // We are going to into reload, stop all access to localstorage                                            // 670
+  _gDB._isReloading = true;                                                                                  // 671
+  // We are not master and the user is working on another tab, we are not in                                 // 672
+  // a hurry to spam the browser with work, plus there are typically acouple                                 // 673
+  // of db access required in most operations, we wait a sec?                                                // 674
+  syncMethodsDelay.oneTimeout(function() {                                                                   // 675
+    // Add event hook                                                                                        // 676
+    GroundDB.onTabSync('methods');                                                                           // 677
+    // Resume methods                                                                                        // 678
+    _gDB._loadMethods();                                                                                     // 679
+    // Resume normal writes                                                                                  // 680
+    _gDB._isReloading = false;                                                                               // 681
+  }, 500);                                                                                                   // 682
+};                                                                                                           // 683
+                                                                                                             // 684
+/////////////////////// ADD TRIGGERS IN LIVEDATACONNECTION /////////////////////                             // 685
+                                                                                                             // 686
+// Modify connection, well just minor                                                                        // 687
+_.extend(_gDB.connection, {                                                                                  // 688
+  // Define a new super for the methods                                                                      // 689
+  _gdbSuper: {                                                                                               // 690
+    apply: _gDB.connection.apply,                                                                            // 691
+    _outstandingMethodFinished:                                                                              // 692
+    _gDB.connection._outstandingMethodFinished                                                               // 693
+  },                                                                                                         // 694
+  // Modify apply                                                                                            // 695
+  apply: function(/* arguments */) {                                                                         // 696
+    var self = this;                                                                                         // 697
+    // Intercept grounded databases                                                                          // 698
+  //  var args = _interceptGroundedDatabases(arguments);                                                     // 699
+    // Call super                                                                                            // 700
+    self._gdbSuper.apply.apply(self, arguments);                                                             // 701
+    // Save methods                                                                                          // 702
+    _gDB._saveMethods();                                                                                     // 703
+  },                                                                                                         // 704
+  // Modify _outstandingMethodFinished                                                                       // 705
+  _outstandingMethodFinished: function() {                                                                   // 706
+    var self = this;                                                                                         // 707
+    // Call super                                                                                            // 708
+    self._gdbSuper._outstandingMethodFinished.apply(self);                                                   // 709
+    // We save current status of methods                                                                     // 710
+    _gDB._saveMethods();                                                                                     // 711
+  }                                                                                                          // 712
+});                                                                                                          // 713
+                                                                                                             // 714
+/////////////////////// LOAD CHANGES FROM OTHER TABS ///////////////////////////                             // 715
+                                                                                                             // 716
+// Make sure we have an addEventListener                                                                     // 717
+if (typeof window.addEventListener !== 'undefined') {                                                        // 718
+    // Add support for multiple tabs                                                                         // 719
+    window.addEventListener('storage', function(e) {                                                         // 720
+    // Data changed in another tab, it would have updated localstorage, I'm                                  // 721
+    // outdated so reload the tab and localstorage - but we test the prefix on the                           // 722
+    // key - since we actually make writes in the localstorage feature test                                  // 723
+    var prefixDatabaseRegEx = new RegExp('^' + _gDB._prefix + 'db.');                                        // 724
+                                                                                                             // 725
+    // Method calls are delayed a bit for optimization                                                       // 726
+    if (e.key === _gDB._prefix + 'methods') {                                                                // 727
+      _gDB._syncMethods('mehods');                                                                           // 728
+    }                                                                                                        // 729
+                                                                                                             // 730
+    // Sync offline client only databases - These update instantly                                           // 731
+    if (prefixDatabaseRegEx.test(e.key)) {                                                                   // 732
+      _gDB._syncDatabase(e.key.replace(prefixDatabaseRegEx, ''));                                            // 733
+    }                                                                                                        // 734
+  }, false);                                                                                                 // 735
+}                                                                                                            // 736
+                                                                                                             // 737
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+}).call(this);
+
+
+/* Exports */
+if (typeof Package === 'undefined') Package = {};
+Package.grounddb = {
+  GroundDB: GroundDB,
+  _gDB: _gDB
+};
+
+})();
+
+//# sourceMappingURL=f46709e51b0e1f0596708074bb8a9f5188f366c4.map

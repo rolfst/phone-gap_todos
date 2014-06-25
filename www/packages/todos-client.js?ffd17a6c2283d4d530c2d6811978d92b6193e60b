@@ -1,0 +1,843 @@
+//////////////////////////////////////////////////////////////////////////
+//                                                                      //
+// This is a generated file. You can view the original                  //
+// source in your browser if your browser supports source maps.         //
+//                                                                      //
+// If you are using Chrome, open the Developer Tools and click the gear //
+// icon in its lower right corner. In the General Settings panel, turn  //
+// on 'Enable source maps'.                                             //
+//                                                                      //
+// If you are using Firefox 23, go to `about:config` and set the        //
+// `devtools.debugger.source-maps-enabled` preference to true.          //
+// (The preference should be on by default in Firefox 24; versions      //
+// older than 23 do not support source maps.)                           //
+//                                                                      //
+//////////////////////////////////////////////////////////////////////////
+
+
+(function () {
+
+/* Imports */
+var Meteor = Package.meteor.Meteor;
+var todos = Package.todos.todos;
+var GroundDB = Package.grounddb.GroundDB;
+var WebApp = Package.webapp.WebApp;
+var Log = Package.logging.Log;
+var Deps = Package.deps.Deps;
+var Session = Package.session.Session;
+var DDP = Package.livedata.DDP;
+var UI = Package.ui.UI;
+var Handlebars = Package.ui.Handlebars;
+var Spacebars = Package.spacebars.Spacebars;
+var Template = Package.templating.Template;
+var check = Package.check.check;
+var Match = Package.check.Match;
+var _ = Package.underscore._;
+var $ = Package.jquery.$;
+var jQuery = Package.jquery.jQuery;
+var Random = Package.random.Random;
+var EJSON = Package.ejson.EJSON;
+var HTML = Package.htmljs.HTML;
+
+/* Package-scope variables */
+var Router, okCancelEvents, activateInput, isOffline;
+
+(function () {
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                                               //
+// packages/todos-client/namespaces.js                                                                           //
+//                                                                                                               //
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+                                                                                                                 //
+todos.client = {};                                                                                               // 1
+                                                                                                                 // 2
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+}).call(this);
+
+
+
+
+
+
+(function () {
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                                               //
+// packages/todos-client/lib/init-session.js                                                                     //
+//                                                                                                               //
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+                                                                                                                 //
+// ID of currently selected list                                                                                 // 1
+Session.setDefault('list_id', null);                                                                             // 2
+                                                                                                                 // 3
+// Name of currently selected tag for filtering                                                                  // 4
+Session.setDefault('tag_filter', null);                                                                          // 5
+                                                                                                                 // 6
+// When adding tag to a todo, ID of the todo                                                                     // 7
+Session.setDefault('editing_addtag', null);                                                                      // 8
+                                                                                                                 // 9
+// When editing a list name, ID of the list                                                                      // 10
+Session.setDefault('editing_listname', null);                                                                    // 11
+                                                                                                                 // 12
+// When editing todo text, ID of the todo                                                                        // 13
+Session.setDefault('editing_itemname', null);                                                                    // 14
+                                                                                                                 // 15
+                                                                                                                 // 16
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+}).call(this);
+
+
+
+
+
+
+(function () {
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                                               //
+// packages/todos-client/lib/routes.js                                                                           //
+//                                                                                                               //
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+                                                                                                                 //
+////////// Tracking selected list in URL //////////                                                              // 1
+                                                                                                                 // 2
+var TodosRouter = Backbone.Router.extend({                                                                       // 3
+  routes: {                                                                                                      // 4
+    ":list_id": "main"                                                                                           // 5
+  },                                                                                                             // 6
+  main: function (list_id) {                                                                                     // 7
+    var oldList = Session.get("list_id");                                                                        // 8
+    if (oldList !== list_id) {                                                                                   // 9
+      Session.set("list_id", list_id);                                                                           // 10
+      Session.set("tag_filter", null);                                                                           // 11
+    }                                                                                                            // 12
+  },                                                                                                             // 13
+  setList: function (list_id) {                                                                                  // 14
+    this.navigate(list_id, true);                                                                                // 15
+  }                                                                                                              // 16
+});                                                                                                              // 17
+                                                                                                                 // 18
+Router = new TodosRouter;                                                                                        // 19
+                                                                                                                 // 20
+Meteor.startup(function () {                                                                                     // 21
+  Backbone.history.start({pushState: true});                                                                     // 22
+});                                                                                                              // 23
+                                                                                                                 // 24
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+}).call(this);
+
+
+
+
+
+
+(function () {
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                                               //
+// packages/todos-client/lib/helpers.js                                                                          //
+//                                                                                                               //
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+                                                                                                                 //
+////////// Helpers for in-place editing //////////                                                               // 1
+                                                                                                                 // 2
+// Returns an event map that handles the "escape" and "return" keys and                                          // 3
+// "blur" events on a text input (given by selector) and interprets them                                         // 4
+// as "ok" or "cancel".                                                                                          // 5
+okCancelEvents = function (selector, callbacks) {                                                                // 6
+  var ok = callbacks.ok || function () {};                                                                       // 7
+  var cancel = callbacks.cancel || function () {};                                                               // 8
+                                                                                                                 // 9
+  var events = {};                                                                                               // 10
+  events['keyup '+selector+', keydown '+selector+', focusout '+selector] =                                       // 11
+    function (evt) {                                                                                             // 12
+      if (evt.type === "keydown" && evt.which === 27) {                                                          // 13
+        // escape = cancel                                                                                       // 14
+        cancel.call(this, evt);                                                                                  // 15
+                                                                                                                 // 16
+      } else if (evt.type === "keyup" && evt.which === 13 ||                                                     // 17
+                 evt.type === "focusout") {                                                                      // 18
+        // blur/return/enter = ok/submit if non-empty                                                            // 19
+        var value = String(evt.target.value || "");                                                              // 20
+        if (value)                                                                                               // 21
+          ok.call(this, value, evt);                                                                             // 22
+        else                                                                                                     // 23
+          cancel.call(this, evt);                                                                                // 24
+      }                                                                                                          // 25
+    };                                                                                                           // 26
+                                                                                                                 // 27
+  return events;                                                                                                 // 28
+};                                                                                                               // 29
+                                                                                                                 // 30
+activateInput = function (input) {                                                                               // 31
+  input.focus();                                                                                                 // 32
+  input.select();                                                                                                // 33
+};                                                                                                               // 34
+                                                                                                                 // 35
+                                                                                                                 // 36
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+}).call(this);
+
+
+
+
+
+
+(function () {
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                                               //
+// packages/todos-client/todos-client.js                                                                         //
+//                                                                                                               //
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+                                                                                                                 //
+// Define Minimongo collections to match server/publish.js.                                                      // 1
+todos.client.Lists = new Meteor.Collection("lists");                                                             // 2
+todos.client.Todos = new Meteor.Collection("todos");                                                             // 3
+GroundDB(todos.client.Lists);                                                                                    // 4
+GroundDB(todos.client.Todos);                                                                                    // 5
+                                                                                                                 // 6
+isOffline = function() {                                                                                         // 7
+    if (navigator.connection){                                                                                   // 8
+    var networkState = navigator.connection.type;                                                                // 9
+                                                                                                                 // 10
+    return (networkState === Connection.UNKNOWN || networkState === Connection.NONE);                            // 11
+    }                                                                                                            // 12
+    return !navigator.onLine;                                                                                    // 13
+}                                                                                                                // 14
+                                                                                                                 // 15
+                                                                                                                 // 16
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+}).call(this);
+
+
+
+
+
+
+(function () {
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                                               //
+// packages/todos-client/views/template.main_todos.js                                                            //
+//                                                                                                               //
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+                                                                                                                 //
+                                                                                                                 // 1
+UI.body.contentParts.push(UI.Component.extend({render: (function() {                                             // 2
+  var self = this;                                                                                               // 3
+  return [ HTML.DIV({                                                                                            // 4
+    id: "side-pane"                                                                                              // 5
+  }, "\n        ", Spacebars.include(self.lookupTemplate("lists")), "\n    "), "\n  ", HTML.DIV({                // 6
+    id: "main"                                                                                                   // 7
+  }, "\n    ", HTML.DIV({                                                                                        // 8
+    id: "top-tag-filter"                                                                                         // 9
+  }, "\n        ", Spacebars.include(self.lookupTemplate("tag_filter")), "\n    "), "\n    \n    ", HTML.DIV({   // 10
+    id: "main-pane"                                                                                              // 11
+  }, "\n        ", Spacebars.include(self.lookupTemplate("todos")), "\n    "), "\n  "), "\n  ", Spacebars.include(self.lookupTemplate("footer")) ];
+})}));                                                                                                           // 13
+Meteor.startup(function () { if (! UI.body.INSTANTIATED) { UI.body.INSTANTIATED = true; UI.DomRange.insert(UI.render(UI.body).dom, document.body); } });
+                                                                                                                 // 15
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+}).call(this);
+
+
+
+
+
+
+(function () {
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                                               //
+// packages/todos-client/views/template.lists.js                                                                 //
+//                                                                                                               //
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+                                                                                                                 //
+                                                                                                                 // 1
+Template.__define__("lists", (function() {                                                                       // 2
+  var self = this;                                                                                               // 3
+  var template = this;                                                                                           // 4
+  return [ HTML.Raw('<h3>Todo Lists</h3>\n  <img src="/todo.jpg" class="title-image" alt="">\n    '), HTML.DIV({ // 5
+    id: "lists"                                                                                                  // 6
+  }, "\n      ", UI.Each(function() {                                                                            // 7
+    return Spacebars.call(self.lookup("lists"));                                                                 // 8
+  }, UI.block(function() {                                                                                       // 9
+    var self = this;                                                                                             // 10
+    return [ "\n        ", HTML.DIV({                                                                            // 11
+      "class": [ "list ", function() {                                                                           // 12
+        return Spacebars.mustache(self.lookup("selected"));                                                      // 13
+      } ]                                                                                                        // 14
+    }, "\n          ", UI.If(function() {                                                                        // 15
+      return Spacebars.call(self.lookup("editing"));                                                             // 16
+    }, UI.block(function() {                                                                                     // 17
+      var self = this;                                                                                           // 18
+      return [ "\n            ", HTML.DIV({                                                                      // 19
+        "class": "edit"                                                                                          // 20
+      }, "\n              ", HTML.INPUT({                                                                        // 21
+        "class": "list-name-input",                                                                              // 22
+        id: "list-name-input",                                                                                   // 23
+        type: "text",                                                                                            // 24
+        value: function() {                                                                                      // 25
+          return Spacebars.mustache(self.lookup("name"));                                                        // 26
+        }                                                                                                        // 27
+      }), "\n            "), "\n          " ];                                                                   // 28
+    }), UI.block(function() {                                                                                    // 29
+      var self = this;                                                                                           // 30
+      return [ "\n            ", HTML.DIV({                                                                      // 31
+        "class": "display"                                                                                       // 32
+      }, "\n              ", HTML.A({                                                                            // 33
+        "class": [ "list-name ", function() {                                                                    // 34
+          return Spacebars.mustache(self.lookup("name_class"));                                                  // 35
+        } ],                                                                                                     // 36
+        href: [ "/", function() {                                                                                // 37
+          return Spacebars.mustache(self.lookup("_id"));                                                         // 38
+        } ]                                                                                                      // 39
+      }, "\n                ", function() {                                                                      // 40
+        return Spacebars.mustache(self.lookup("name"));                                                          // 41
+      }, "\n              "), "\n            "), "\n          " ];                                               // 42
+    })), "\n        "), "\n      " ];                                                                            // 43
+  })), "\n    "), HTML.Raw('\n    <div id="createList">\n      <input type="text" id="new-list" placeholder="New list">\n    </div>') ];
+}));                                                                                                             // 45
+                                                                                                                 // 46
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+}).call(this);
+
+
+
+
+
+
+(function () {
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                                               //
+// packages/todos-client/views/template.tag_filter.js                                                            //
+//                                                                                                               //
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+                                                                                                                 //
+                                                                                                                 // 1
+Template.__define__("tag_filter", (function() {                                                                  // 2
+  var self = this;                                                                                               // 3
+  var template = this;                                                                                           // 4
+  return HTML.DIV({                                                                                              // 5
+    id: "tag-filter",                                                                                            // 6
+    "class": "tag-list"                                                                                          // 7
+  }, HTML.Raw('\n    <div class="label">Show:</div>\n    '), UI.Each(function() {                                // 8
+    return Spacebars.call(self.lookup("tags"));                                                                  // 9
+  }, UI.block(function() {                                                                                       // 10
+    var self = this;                                                                                             // 11
+    return [ "\n      ", HTML.DIV({                                                                              // 12
+      "class": [ "tag ", function() {                                                                            // 13
+        return Spacebars.mustache(self.lookup("selected"));                                                      // 14
+      } ]                                                                                                        // 15
+    }, "\n        ", function() {                                                                                // 16
+      return Spacebars.mustache(self.lookup("tag_text"));                                                        // 17
+    }, " ", HTML.SPAN({                                                                                          // 18
+      "class": "count"                                                                                           // 19
+    }, "(", function() {                                                                                         // 20
+      return Spacebars.mustache(self.lookup("count"));                                                           // 21
+    }, ")"), "\n      "), "\n    " ];                                                                            // 22
+  })), "\n  ");                                                                                                  // 23
+}));                                                                                                             // 24
+                                                                                                                 // 25
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+}).call(this);
+
+
+
+
+
+
+(function () {
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                                               //
+// packages/todos-client/views/template.todos.js                                                                 //
+//                                                                                                               //
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+                                                                                                                 //
+                                                                                                                 // 1
+Template.__define__("todos", (function() {                                                                       // 2
+  var self = this;                                                                                               // 3
+  var template = this;                                                                                           // 4
+  return UI.If(function() {                                                                                      // 5
+    return Spacebars.call(self.lookup("any_list_selected"));                                                     // 6
+  }, UI.block(function() {                                                                                       // 7
+    var self = this;                                                                                             // 8
+    return [ "\n    ", HTML.DIV({                                                                                // 9
+      id: "items-view"                                                                                           // 10
+    }, "\n        ", HTML.DIV({                                                                                  // 11
+      id: "new-todo-box"                                                                                         // 12
+    }, "\n          ", HTML.INPUT({                                                                              // 13
+      type: "text",                                                                                              // 14
+      id: "new-todo",                                                                                            // 15
+      placeholder: "New item"                                                                                    // 16
+    }), "\n        "), "\n        ", HTML.UL({                                                                   // 17
+      id: "item-list"                                                                                            // 18
+    }, "\n          ", UI.Each(function() {                                                                      // 19
+      return Spacebars.call(self.lookup("todos"));                                                               // 20
+    }, UI.block(function() {                                                                                     // 21
+      var self = this;                                                                                           // 22
+      return [ "\n            ", Spacebars.include(self.lookupTemplate("todo_item")), "\n          " ];          // 23
+    })), "\n        "), "\n    "), "\n  " ];                                                                     // 24
+  }));                                                                                                           // 25
+}));                                                                                                             // 26
+                                                                                                                 // 27
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+}).call(this);
+
+
+
+
+
+
+(function () {
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                                               //
+// packages/todos-client/views/template.todo_item.js                                                             //
+//                                                                                                               //
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+                                                                                                                 //
+                                                                                                                 // 1
+Template.__define__("todo_item", (function() {                                                                   // 2
+  var self = this;                                                                                               // 3
+  var template = this;                                                                                           // 4
+  return HTML.LI({                                                                                               // 5
+    "class": [ "todo ", function() {                                                                             // 6
+      return Spacebars.mustache(self.lookup("done_class"));                                                      // 7
+    } ]                                                                                                          // 8
+  }, "\n    ", UI.If(function() {                                                                                // 9
+    return Spacebars.call(self.lookup("editing"));                                                               // 10
+  }, UI.block(function() {                                                                                       // 11
+    var self = this;                                                                                             // 12
+    return [ "\n      ", HTML.DIV({                                                                              // 13
+      "class": "edit"                                                                                            // 14
+    }, "\n        ", HTML.INPUT({                                                                                // 15
+      id: "todo-input",                                                                                          // 16
+      type: "text",                                                                                              // 17
+      value: function() {                                                                                        // 18
+        return Spacebars.mustache(self.lookup("text"));                                                          // 19
+      }                                                                                                          // 20
+    }), "\n      "), "\n    " ];                                                                                 // 21
+  }), UI.block(function() {                                                                                      // 22
+    var self = this;                                                                                             // 23
+    return [ "\n      ", HTML.DIV({                                                                              // 24
+      "class": "destroy"                                                                                         // 25
+    }), "\n      ", HTML.DIV({                                                                                   // 26
+      "class": "display"                                                                                         // 27
+    }, "\n        ", HTML.INPUT({                                                                                // 28
+      "class": "check",                                                                                          // 29
+      name: "markdone",                                                                                          // 30
+      type: "checkbox",                                                                                          // 31
+      checked: function() {                                                                                      // 32
+        return Spacebars.mustache(self.lookup("done"));                                                          // 33
+      }                                                                                                          // 34
+    }), "\n        ", HTML.DIV({                                                                                 // 35
+      "class": "todo-text"                                                                                       // 36
+    }, function() {                                                                                              // 37
+      return Spacebars.mustache(self.lookup("text"));                                                            // 38
+    }), "\n      "), "\n    " ];                                                                                 // 39
+  })), "\n    ", HTML.DIV({                                                                                      // 40
+    "class": "item-tags"                                                                                         // 41
+  }, "\n      ", UI.Each(function() {                                                                            // 42
+    return Spacebars.call(self.lookup("tag_objs"));                                                              // 43
+  }, UI.block(function() {                                                                                       // 44
+    var self = this;                                                                                             // 45
+    return [ "\n        ", HTML.DIV({                                                                            // 46
+      "class": "tag removable_tag"                                                                               // 47
+    }, "\n          ", HTML.DIV({                                                                                // 48
+      "class": "name"                                                                                            // 49
+    }, function() {                                                                                              // 50
+      return Spacebars.mustache(self.lookup("tag"));                                                             // 51
+    }), "\n          ", HTML.DIV({                                                                               // 52
+      "class": "remove"                                                                                          // 53
+    }), "\n        "), "\n      " ];                                                                             // 54
+  })), "\n      ", UI.If(function() {                                                                            // 55
+    return Spacebars.call(self.lookup("adding_tag"));                                                            // 56
+  }, UI.block(function() {                                                                                       // 57
+    var self = this;                                                                                             // 58
+    return [ "\n        ", HTML.DIV({                                                                            // 59
+      "class": "tag edittag"                                                                                     // 60
+    }, "\n          ", HTML.INPUT({                                                                              // 61
+      type: "text",                                                                                              // 62
+      id: "edittag-input",                                                                                       // 63
+      value: ""                                                                                                  // 64
+    }), "\n        "), "\n      " ];                                                                             // 65
+  }), UI.block(function() {                                                                                      // 66
+    var self = this;                                                                                             // 67
+    return [ "\n        ", HTML.DIV({                                                                            // 68
+      "class": "tag addtag"                                                                                      // 69
+    }, "\n          +tag\n        "), "\n      " ];                                                              // 70
+  })), "\n    "), "\n  ");                                                                                       // 71
+}));                                                                                                             // 72
+                                                                                                                 // 73
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+}).call(this);
+
+
+
+
+
+
+(function () {
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                                               //
+// packages/todos-client/views/template.footer.js                                                                //
+//                                                                                                               //
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+                                                                                                                 //
+                                                                                                                 // 1
+Template.__define__("footer", (function() {                                                                      // 2
+  var self = this;                                                                                               // 3
+  var template = this;                                                                                           // 4
+  return HTML.DIV({                                                                                              // 5
+    "class": "footer"                                                                                            // 6
+  }, "made with meteor ", HTML.SPAN({                                                                            // 7
+    id: "offlineindicator"                                                                                       // 8
+  }, function() {                                                                                                // 9
+    return Spacebars.mustache(self.lookup("isOffline"));                                                         // 10
+  }));                                                                                                           // 11
+}));                                                                                                             // 12
+                                                                                                                 // 13
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+}).call(this);
+
+
+
+
+
+
+(function () {
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                                               //
+// packages/todos-client/views/lists.js                                                                          //
+//                                                                                                               //
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+                                                                                                                 //
+// Subscribe to 'lists' collection on startup.                                                                   // 1
+// Select a list once data has arrived.                                                                          // 2
+var listsHandle = Meteor.subscribe('lists', function () {                                                        // 3
+  if (!Session.get('list_id')) {                                                                                 // 4
+    var list = todos.client.Lists.findOne({}, {sort: {name: 1}});                                                // 5
+    if (list)                                                                                                    // 6
+      Router.setList(list._id);                                                                                  // 7
+  }                                                                                                              // 8
+});                                                                                                              // 9
+                                                                                                                 // 10
+                                                                                                                 // 11
+////////// Lists //////////                                                                                      // 12
+                                                                                                                 // 13
+Template.lists.loading = function () {                                                                           // 14
+  return !listsHandle.ready() || isOffline();                                                                    // 15
+};                                                                                                               // 16
+                                                                                                                 // 17
+Template.lists.lists = function () {                                                                             // 18
+  return todos.client.Lists.find({}, {sort: {name: 1}});                                                         // 19
+};                                                                                                               // 20
+                                                                                                                 // 21
+Template.lists.events({                                                                                          // 22
+  'mousedown .list': function (evt) { // select list                                                             // 23
+    Router.setList(this._id);                                                                                    // 24
+  },                                                                                                             // 25
+  'click .list': function (evt) {                                                                                // 26
+    // prevent clicks on <a> from refreshing the page.                                                           // 27
+    evt.preventDefault();                                                                                        // 28
+  },                                                                                                             // 29
+  'dblclick .list': function (evt, tmpl) { // start editing list name                                            // 30
+    Session.set('editing_listname', this._id);                                                                   // 31
+    Deps.flush(); // force DOM redraw, so we can focus the edit field                                            // 32
+    activateInput(tmpl.find("#list-name-input"));                                                                // 33
+  }                                                                                                              // 34
+});                                                                                                              // 35
+                                                                                                                 // 36
+// Attach events to keydown, keyup, and blur on "New list" input box.                                            // 37
+Template.lists.events(okCancelEvents(                                                                            // 38
+  '#new-list',                                                                                                   // 39
+  {                                                                                                              // 40
+    ok: function (text, evt) {                                                                                   // 41
+      var id = todos.client.Lists.insert({name: text});                                                          // 42
+      Router.setList(id);                                                                                        // 43
+      evt.target.value = "";                                                                                     // 44
+    }                                                                                                            // 45
+  }));                                                                                                           // 46
+                                                                                                                 // 47
+Template.lists.events(okCancelEvents(                                                                            // 48
+  '#list-name-input',                                                                                            // 49
+  {                                                                                                              // 50
+    ok: function (value) {                                                                                       // 51
+      todos.client.Lists.update(this._id, {$set: {name: value}});                                                // 52
+      Session.set('editing_listname', null);                                                                     // 53
+    },                                                                                                           // 54
+    cancel: function () {                                                                                        // 55
+      Session.set('editing_listname', null);                                                                     // 56
+    }                                                                                                            // 57
+  }));                                                                                                           // 58
+                                                                                                                 // 59
+Template.lists.selected = function () {                                                                          // 60
+  return Session.equals('list_id', this._id) ? 'selected' : '';                                                  // 61
+};                                                                                                               // 62
+                                                                                                                 // 63
+Template.lists.name_class = function () {                                                                        // 64
+  return this.name ? '' : 'empty';                                                                               // 65
+};                                                                                                               // 66
+                                                                                                                 // 67
+Template.lists.editing = function () {                                                                           // 68
+  return Session.equals('editing_listname', this._id);                                                           // 69
+};                                                                                                               // 70
+                                                                                                                 // 71
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+}).call(this);
+
+
+
+
+
+
+(function () {
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                                               //
+// packages/todos-client/views/todos.js                                                                          //
+//                                                                                                               //
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+                                                                                                                 //
+////////// Todos //////////                                                                                      // 1
+                                                                                                                 // 2
+Template.todos.loading = function () {                                                                           // 3
+  return todosHandle && !todosHandle.ready();                                                                    // 4
+};                                                                                                               // 5
+                                                                                                                 // 6
+Template.todos.any_list_selected = function () {                                                                 // 7
+  return !Session.equals('list_id', null);                                                                       // 8
+};                                                                                                               // 9
+                                                                                                                 // 10
+Template.todos.events(okCancelEvents(                                                                            // 11
+  '#new-todo',                                                                                                   // 12
+  {                                                                                                              // 13
+    ok: function (text, evt) {                                                                                   // 14
+      var tag = Session.get('tag_filter');                                                                       // 15
+      todos.client.Todos.insert({                                                                                // 16
+        text: text,                                                                                              // 17
+        list_id: Session.get('list_id'),                                                                         // 18
+        done: false,                                                                                             // 19
+        timestamp: (new Date()).getTime(),                                                                       // 20
+        tags: tag ? [tag] : []                                                                                   // 21
+      });                                                                                                        // 22
+      evt.target.value = '';                                                                                     // 23
+    }                                                                                                            // 24
+  }));                                                                                                           // 25
+                                                                                                                 // 26
+Template.todos.todos = function () {                                                                             // 27
+  // Determine which todos to display in main pane,                                                              // 28
+  // selected based on list_id and tag_filter.                                                                   // 29
+                                                                                                                 // 30
+  var list_id = Session.get('list_id');                                                                          // 31
+  if (!list_id)                                                                                                  // 32
+    return {};                                                                                                   // 33
+                                                                                                                 // 34
+  var sel = {list_id: list_id};                                                                                  // 35
+  var tag_filter = Session.get('tag_filter');                                                                    // 36
+  if (tag_filter)                                                                                                // 37
+    sel.tags = tag_filter;                                                                                       // 38
+                                                                                                                 // 39
+  return todos.client.Todos.find(sel, {sort: {timestamp: 1}});                                                   // 40
+};                                                                                                               // 41
+                                                                                                                 // 42
+Template.todo_item.tag_objs = function () {                                                                      // 43
+  var todo_id = this._id;                                                                                        // 44
+  return _.map(this.tags || [], function (tag) {                                                                 // 45
+    return {todo_id: todo_id, tag: tag};                                                                         // 46
+  });                                                                                                            // 47
+};                                                                                                               // 48
+                                                                                                                 // 49
+Template.todo_item.done_class = function () {                                                                    // 50
+  return this.done ? 'done' : '';                                                                                // 51
+};                                                                                                               // 52
+                                                                                                                 // 53
+Template.todo_item.editing = function () {                                                                       // 54
+  return Session.equals('editing_itemname', this._id);                                                           // 55
+};                                                                                                               // 56
+                                                                                                                 // 57
+Template.todo_item.adding_tag = function () {                                                                    // 58
+  return Session.equals('editing_addtag', this._id);                                                             // 59
+};                                                                                                               // 60
+                                                                                                                 // 61
+Template.todo_item.events({                                                                                      // 62
+  'click .check': function () {                                                                                  // 63
+    todos.client.Todos.update(this._id, {$set: {done: !this.done}});                                             // 64
+  },                                                                                                             // 65
+                                                                                                                 // 66
+  'click .destroy': function () {                                                                                // 67
+    todos.client.Todos.remove(this._id);                                                                         // 68
+  },                                                                                                             // 69
+                                                                                                                 // 70
+  'click .addtag': function (evt, tmpl) {                                                                        // 71
+    Session.set('editing_addtag', this._id);                                                                     // 72
+    Deps.flush(); // update DOM before focus                                                                     // 73
+    activateInput(tmpl.find("#edittag-input"));                                                                  // 74
+  },                                                                                                             // 75
+                                                                                                                 // 76
+  'dblclick .display .todo-text': function (evt, tmpl) {                                                         // 77
+    Session.set('editing_itemname', this._id);                                                                   // 78
+    Deps.flush(); // update DOM before focus                                                                     // 79
+    activateInput(tmpl.find("#todo-input"));                                                                     // 80
+  },                                                                                                             // 81
+                                                                                                                 // 82
+  'click .remove': function (evt) {                                                                              // 83
+    var tag = this.tag;                                                                                          // 84
+    var id = this.todo_id;                                                                                       // 85
+                                                                                                                 // 86
+    evt.target.parentNode.style.opacity = 0;                                                                     // 87
+    // wait for CSS animation to finish                                                                          // 88
+    Meteor.setTimeout(function () {                                                                              // 89
+      todos.client.Todos.update({_id: id}, {$pull: {tags: tag}});                                                // 90
+    }, 300);                                                                                                     // 91
+  }                                                                                                              // 92
+});                                                                                                              // 93
+                                                                                                                 // 94
+Template.todo_item.events(okCancelEvents(                                                                        // 95
+  '#todo-input',                                                                                                 // 96
+  {                                                                                                              // 97
+    ok: function (value) {                                                                                       // 98
+      todos.client.Todos.update(this._id, {$set: {text: value}});                                                // 99
+      Session.set('editing_itemname', null);                                                                     // 100
+    },                                                                                                           // 101
+    cancel: function () {                                                                                        // 102
+      Session.set('editing_itemname', null);                                                                     // 103
+    }                                                                                                            // 104
+  }));                                                                                                           // 105
+                                                                                                                 // 106
+Template.todo_item.events(okCancelEvents(                                                                        // 107
+  '#edittag-input',                                                                                              // 108
+  {                                                                                                              // 109
+    ok: function (value) {                                                                                       // 110
+      todos.client.Todos.update(this._id, {$addToSet: {tags: value}});                                           // 111
+      Session.set('editing_addtag', null);                                                                       // 112
+    },                                                                                                           // 113
+    cancel: function () {                                                                                        // 114
+      Session.set('editing_addtag', null);                                                                       // 115
+    }                                                                                                            // 116
+  }));                                                                                                           // 117
+                                                                                                                 // 118
+var todosHandle = null;                                                                                          // 119
+// Always be subscribed to the todos for the selected list.                                                      // 120
+Deps.autorun(function () {                                                                                       // 121
+  var list_id = Session.get('list_id');                                                                          // 122
+  if (list_id)                                                                                                   // 123
+    todosHandle = Meteor.subscribe('todos', list_id);                                                            // 124
+  else                                                                                                           // 125
+    todosHandle = null;                                                                                          // 126
+});                                                                                                              // 127
+                                                                                                                 // 128
+                                                                                                                 // 129
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+}).call(this);
+
+
+
+
+
+
+(function () {
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                                               //
+// packages/todos-client/views/footer.js                                                                         //
+//                                                                                                               //
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+                                                                                                                 //
+                                                                                                                 // 1
+Template.footer.isOffline = function () {                                                                        // 2
+  return isOffline() ? "1" : "0";                                                                                // 3
+};                                                                                                               // 4
+                                                                                                                 // 5
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+}).call(this);
+
+
+
+
+
+
+(function () {
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                                               //
+// packages/todos-client/filters/filters.js                                                                      //
+//                                                                                                               //
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+                                                                                                                 //
+                                                                                                                 // 1
+////////// Tag Filter //////////                                                                                 // 2
+                                                                                                                 // 3
+// Pick out the unique tags from all todos in current list.                                                      // 4
+Template.tag_filter.tags = function () {                                                                         // 5
+  var tag_infos = [];                                                                                            // 6
+  var total_count = 0;                                                                                           // 7
+                                                                                                                 // 8
+  todos.client.Todos.find({list_id: Session.get('list_id')}).forEach(function (todo) {                           // 9
+    _.each(todo.tags, function (tag) {                                                                           // 10
+      var tag_info = _.find(tag_infos, function (x) { return x.tag === tag; });                                  // 11
+      if (! tag_info)                                                                                            // 12
+        tag_infos.push({tag: tag, count: 1});                                                                    // 13
+      else                                                                                                       // 14
+        tag_info.count++;                                                                                        // 15
+    });                                                                                                          // 16
+    total_count++;                                                                                               // 17
+  });                                                                                                            // 18
+                                                                                                                 // 19
+  tag_infos = _.sortBy(tag_infos, function (x) { return x.tag; });                                               // 20
+  tag_infos.unshift({tag: null, count: total_count});                                                            // 21
+                                                                                                                 // 22
+  return tag_infos;                                                                                              // 23
+};                                                                                                               // 24
+                                                                                                                 // 25
+Template.tag_filter.tag_text = function () {                                                                     // 26
+  return this.tag || "All items";                                                                                // 27
+};                                                                                                               // 28
+                                                                                                                 // 29
+Template.tag_filter.selected = function () {                                                                     // 30
+  return Session.equals('tag_filter', this.tag) ? 'selected' : '';                                               // 31
+};                                                                                                               // 32
+                                                                                                                 // 33
+Template.tag_filter.events({                                                                                     // 34
+  'mousedown .tag': function () {                                                                                // 35
+    if (Session.equals('tag_filter', this.tag))                                                                  // 36
+      Session.set('tag_filter', null);                                                                           // 37
+    else                                                                                                         // 38
+      Session.set('tag_filter', this.tag);                                                                       // 39
+  }                                                                                                              // 40
+});                                                                                                              // 41
+                                                                                                                 // 42
+                                                                                                                 // 43
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+}).call(this);
+
+
+/* Exports */
+if (typeof Package === 'undefined') Package = {};
+Package['todos-client'] = {};
+
+})();
+
+//# sourceMappingURL=ffd17a6c2283d4d530c2d6811978d92b6193e60b.map

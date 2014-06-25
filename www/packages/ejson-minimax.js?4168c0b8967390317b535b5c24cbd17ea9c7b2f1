@@ -1,0 +1,254 @@
+//////////////////////////////////////////////////////////////////////////
+//                                                                      //
+// This is a generated file. You can view the original                  //
+// source in your browser if your browser supports source maps.         //
+//                                                                      //
+// If you are using Chrome, open the Developer Tools and click the gear //
+// icon in its lower right corner. In the General Settings panel, turn  //
+// on 'Enable source maps'.                                             //
+//                                                                      //
+// If you are using Firefox 23, go to `about:config` and set the        //
+// `devtools.debugger.source-maps-enabled` preference to true.          //
+// (The preference should be on by default in Firefox 24; versions      //
+// older than 23 do not support source maps.)                           //
+//                                                                      //
+//////////////////////////////////////////////////////////////////////////
+
+
+(function () {
+
+/* Imports */
+var Meteor = Package.meteor.Meteor;
+var _ = Package.underscore._;
+var EJSON = Package.ejson.EJSON;
+
+(function () {
+
+//////////////////////////////////////////////////////////////////////////////////////
+//                                                                                  //
+// packages/ejson-minimax/ejson.minimax.js                                          //
+//                                                                                  //
+//////////////////////////////////////////////////////////////////////////////////////
+                                                                                    //
+/*                                                                                  // 1
+  Minify and Maxify by RaiX aka Morten N.O. Nørgaard Henriksen (mh@gi-software.com) // 2
+                                                                                    // 3
+  EJSON.minify( Object )                                                            // 4
+                                                                                    // 5
+  EJSON.maxify( JSON string )                                                       // 6
+                                                                                    // 7
+  TODO:                                                                             // 8
+  Make minify and maxify object operators only - leave the stringify and parsing    // 9
+  to the user if they need it - This way the operation is isolated and could be     // 10
+  used in more cases                                                                // 11
+                                                                                    // 12
+                                                                                    // 13
+  // For faster lookup                                                              // 14
+  var keywords = {                                                                  // 15
+    '_id': 0,                                                                       // 16
+    'test': 1,                                                                      // 17
+    'comment': 2,                                                                   // 18
+    'list': 3,                                                                      // 19
+    'note': 4                                                                       // 20
+  };                                                                                // 21
+                                                                                    // 22
+  var keywordsList = [ '_id', 'test', 'comment', 'list', 'note' ];                  // 23
+                                                                                    // 24
+  var headers = [0, [0, 1, 2], [0, 3, -5] ];                                        // 25
+                                                                                    // 26
+  var data = []; */                                                                 // 27
+                                                                                    // 28
+  // if(!Array.isArray) {                                                           // 29
+  //   Array.isArray = function (vArg) {                                            // 30
+  //     return Object.prototype.toString.call(vArg) === '[object Array]';          // 31
+  //   };                                                                           // 32
+  // }                                                                              // 33
+                                                                                    // 34
+                                                                                    // 35
+  EJSON.minify = function(maxObj) {                                                 // 36
+    var keywords = {'false': 0, 'true': 1, 'null': 2};                              // 37
+    var keywordsList = [false, true, null];                                         // 38
+    var headers = [0];                                                              // 39
+                                                                                    // 40
+    var getIdKeywork = function(key) {                                              // 41
+      if (typeof keywords[key] === 'undefined') {                                   // 42
+        keywords[key] = keywordsList.push(key) - 1;                                 // 43
+      }                                                                             // 44
+      return keywords[key];                                                         // 45
+    };                                                                              // 46
+                                                                                    // 47
+    // we give a value - if found in keywords then an id is returned else null      // 48
+    var getIdKeywordValue = function(value) {                                       // 49
+      var key = String(value);                                                      // 50
+      if (typeof keywords[key] !== 'undefined') {                                   // 51
+        return keywords[key];                                                       // 52
+      }                                                                             // 53
+      return null;                                                                  // 54
+    };                                                                              // 55
+                                                                                    // 56
+    var getHeader = function(newHeader) {                                           // 57
+      var headerId = null;                                                          // 58
+      for (var i = 1; i < headers.length; i++) {                                    // 59
+        var orgHeader = headers[i];                                                 // 60
+        // We only need to iterate over the intersection to get a match             // 61
+        var minLength = Math.min(orgHeader.length, newHeader.length);               // 62
+        var isMatch = true;                                                         // 63
+        for (var a = 0; a < minLength; a++) {                                       // 64
+          // We break if not a match                                                // 65
+          if (orgHeader[a] !== newHeader[a]) {                                      // 66
+            isMatch = false;                                                        // 67
+            break;                                                                  // 68
+          }                                                                         // 69
+        }                                                                           // 70
+        if (isMatch) {                                                              // 71
+          // We check to see if                                                     // 72
+          // We are equal or in another header                                      // 73
+          // eg. headers = [1, 2, 3] newHeader=[1, 2, 3] return id                  // 74
+          // eg. headers = [1, 2, 3, 4] newHeader=[1, 2, 3] return id               // 75
+          headerId = i;                                                             // 76
+          // We could maybe contain another header - so we extend the org. and use  // 77
+          // that eg. headers = [1, 2, 3] newHeader=[1, 2, 3, 4] then               // 78
+          // set headers=newHeader and return id                                    // 79
+          if (newHeader.length > minLength) {                                       // 80
+            headers[i] = newHeader;                                                 // 81
+          }                                                                         // 82
+        }                                                                           // 83
+        // Stop when we found a match                                               // 84
+        if (headerId !== null) {                                                    // 85
+          break;                                                                    // 86
+        }                                                                           // 87
+      }                                                                             // 88
+      // Or none of the above we add a new header                                   // 89
+      if (headerId === null) {                                                      // 90
+        headerId = headers.push(newHeader) - 1;                                     // 91
+      }                                                                             // 92
+      return headerId;                                                              // 93
+    };                                                                              // 94
+                                                                                    // 95
+    var minifyHelper = function(maxObj) {                                           // 96
+      var createHeader = !_.isArray(maxObj);                                        // 97
+      var target = [];                                                              // 98
+      var header = [];                                                              // 99
+                                                                                    // 100
+      _.each(maxObj, function(value, key) {                                         // 101
+        var minKey = (createHeader) ? getIdKeywork(key) : 0;                        // 102
+        if (value !== null && typeof value === 'object') {                          // 103
+          // Array or Object                                                        // 104
+          if (createHeader) {                                                       // 105
+            header.push(minKey);                                                    // 106
+          }                                                                         // 107
+          target.push(minifyHelper(value));                                         // 108
+        } else {                                                                    // 109
+          // Check if value is found in keywords                                    // 110
+          var valueId = getIdKeywordValue(value);                                   // 111
+                                                                                    // 112
+          if (valueId === null) {                                                   // 113
+            // Not found, we add normal values                                      // 114
+            header.push(minKey);                                                    // 115
+            target.push(value);                                                     // 116
+          } else {                                                                  // 117
+            // Found, make minKey negative and set value to valueId                 // 118
+            header.push(-minKey);                                                   // 119
+            target.push(valueId);                                                   // 120
+          }                                                                         // 121
+        }                                                                           // 122
+      });                                                                           // 123
+                                                                                    // 124
+      if (createHeader) {                                                           // 125
+        var headerId = getHeader(header);                                           // 126
+        target.unshift(headerId);                                                   // 127
+      } else {                                                                      // 128
+        target.unshift(0); // 0 marks an array with no headers                      // 129
+      }                                                                             // 130
+                                                                                    // 131
+                                                                                    // 132
+      return target;                                                                // 133
+    };                                                                              // 134
+                                                                                    // 135
+    // If not an object then not much to work on                                    // 136
+    if (typeof maxObj !== 'object') {                                               // 137
+      return EJSON.stringify(maxObj);                                               // 138
+    }                                                                               // 139
+                                                                                    // 140
+    var data = minifyHelper(EJSON.toJSONValue(maxObj));                             // 141
+                                                                                    // 142
+    // Remove the heading false, true, null - these are added at maximize           // 143
+    keywordsList.shift();                                                           // 144
+    keywordsList.shift();                                                           // 145
+    keywordsList.shift();                                                           // 146
+                                                                                    // 147
+    return JSON.stringify([ keywordsList, headers, data ]);                         // 148
+  };                                                                                // 149
+                                                                                    // 150
+                                                                                    // 151
+  // Takes an minify JSON object and maxify to object                               // 152
+  EJSON.maxify = function(minObjJSON) {                                             // 153
+    // Parse the string into array                                                  // 154
+    var minObj = JSON.parse(String(minObjJSON));                                    // 155
+    // We expect an array of 3                                                      // 156
+    if (minObj === null || minObj.length !== 3) {                                   // 157
+      // Return normal EJSON.parse                                                  // 158
+      return EJSON.fromJSONValue(minObj);                                           // 159
+    }                                                                               // 160
+    // Init globals                                                                 // 161
+    var keywordsList = minObj[0];                                                   // 162
+    var headers = minObj[1];                                                        // 163
+    var data = minObj[2];                                                           // 164
+                                                                                    // 165
+    // Add [false, true, null] to the beginning                                     // 166
+    keywordsList.unshift(false, true, null);                                        // 167
+                                                                                    // 168
+    var maxifyHelper = function(minObj) {                                           // 169
+      // read header reference and fetch the header                                 // 170
+      var headerId = minObj.shift();                                                // 171
+      var header = (headerId) ? headers[headerId] : null;                           // 172
+                                                                                    // 173
+      // If header === 0 then we are creating an array otherwise an object          // 174
+      var result = (header === null) ? [] : {};                                     // 175
+      // We launch interation over the minObj                                       // 176
+      if (header === null) {                                                        // 177
+        // Create an array                                                          // 178
+        for (var i = 0; i < minObj.length; i++) {                                   // 179
+          if (_.isArray(minObj[i])) {                                               // 180
+            result.push(maxifyHelper(minObj[i]));                                   // 181
+          } else {                                                                  // 182
+            result.push(minObj[i]);                                                 // 183
+          }                                                                         // 184
+        }                                                                           // 185
+      } else {                                                                      // 186
+        // Create object                                                            // 187
+        for (var i = 0; i < minObj.length; i++) {                                   // 188
+          // Lookup keyword id can be negative for value lookup                     // 189
+          var keyId = header[i];                                                    // 190
+          // Lookup keyword                                                         // 191
+          var key = keywordsList[Math.abs(keyId)];                                  // 192
+          // Is value an array then dig deeper                                      // 193
+          if (_.isArray(minObj[i])) {                                               // 194
+            result[key] = maxifyHelper(minObj[i]);                                  // 195
+          } else {                                                                  // 196
+            var value = minObj[i]; // Value or valueId                              // 197
+            // if keyId is negative then lookup the value in keywords               // 198
+            if (keyId < 0) {                                                        // 199
+              value = keywordsList[value];                                          // 200
+            }                                                                       // 201
+            result[key] = value;                                                    // 202
+          }                                                                         // 203
+        }                                                                           // 204
+      }                                                                             // 205
+      return result;                                                                // 206
+    };                                                                              // 207
+                                                                                    // 208
+    return EJSON.fromJSONValue(maxifyHelper(data));                                 // 209
+  };                                                                                // 210
+//////////////////////////////////////////////////////////////////////////////////////
+
+}).call(this);
+
+
+/* Exports */
+if (typeof Package === 'undefined') Package = {};
+Package['ejson-minimax'] = {};
+
+})();
+
+//# sourceMappingURL=4168c0b8967390317b535b5c24cbd17ea9c7b2f1.map
